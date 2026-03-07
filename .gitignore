@@ -27,6 +27,7 @@ build/
 out/
 .output/
 coverage/
+screenshots/
 
 # ------------------------------------------------
 # ⚡ 프레임워크 전용 (SvelteKit, Next.js 등)
