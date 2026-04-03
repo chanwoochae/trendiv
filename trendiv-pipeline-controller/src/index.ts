@@ -220,7 +220,7 @@ if (process.env.BATCH_MODE === "true") {
         );
 
         const { data, error } = await supabase
-          .from("trend")
+          .from("article")
           .select("*")
           .eq("status", "FAIL")
           .order("date", { ascending: false })
@@ -418,19 +418,19 @@ if (process.env.BATCH_MODE === "true") {
         const [rawCount, analyzedCount, rejectedCount, failCount] =
           await Promise.all([
             supabase
-              .from("trend")
+              .from("article")
               .select("*", { count: "exact", head: true })
               .eq("status", "RAW"),
             supabase
-              .from("trend")
+              .from("article")
               .select("*", { count: "exact", head: true })
               .eq("status", "ANALYZED"),
             supabase
-              .from("trend")
+              .from("article")
               .select("*", { count: "exact", head: true })
               .eq("status", "REJECTED"),
             supabase
-              .from("trend")
+              .from("article")
               .select("*", { count: "exact", head: true })
               .eq("status", "FAIL"),
           ]);
