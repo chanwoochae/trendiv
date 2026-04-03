@@ -1,6 +1,6 @@
 {
   "name": "trendiv-monorepo",
-  "version": "1.11.6",
+  "version": "1.11.7",
   "private": true,
   "description": "Trendiv Root Package",
   "scripts": {
