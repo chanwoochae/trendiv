@@ -11,6 +11,14 @@ on:
       - "trendiv-result-module/**"
       - ".github/workflows/deploy.yml"
 
+  # 수동 실행
+  workflow_dispatch:
+    inputs:
+      target:
+        description: 'Deploy target (production or staging)'
+        required: false
+        default: 'production'
+
   # Preview: PR + preview 라벨
   pull_request:
     types: [labeled]
@@ -25,7 +33,7 @@ jobs:
   # 🚀 Production 배포 (master → trendiv.org, v1)
   # ============================================
   deploy-production:
-    if: github.event_name == 'push' && github.ref == 'refs/heads/master'
+    if: github.event_name == 'push' && github.ref == 'refs/heads/master' || github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/master'
     runs-on: ubuntu-latest
 
     steps:
@@ -67,7 +75,7 @@ jobs:
   # 🧪 Staging 배포 (develop → develop.trendiv-web.pages.dev, v2)
   # ============================================
   deploy-staging:
-    if: github.event_name == 'push' && github.ref == 'refs/heads/develop'
+    if: github.event_name == 'push' && github.ref == 'refs/heads/develop' || github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/develop'
     runs-on: ubuntu-latest
 
     steps:
