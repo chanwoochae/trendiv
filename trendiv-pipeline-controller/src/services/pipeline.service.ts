@@ -117,7 +117,7 @@ export const runPipeline = async (
     console.log(" 1. 🕷️  Running Scraper...");
 
     const { count } = await supabase
-      .from("trend")
+      .from("article")
       .select("*", { count: "exact", head: true });
 
     let customDays: number | undefined = undefined;
@@ -139,7 +139,7 @@ export const runPipeline = async (
       }));
 
       const { error } = await supabase
-        .from("trend")
+        .from("article")
         .upsert(dbRawData, { onConflict: "link", ignoreDuplicates: true });
 
       if (error) console.error("      ⚠️ 원본 저장 실패:", error.message);
@@ -263,7 +263,7 @@ export const runPipeline = async (
         });
 
         const { error: failError } = await supabase
-          .from("trend")
+          .from("article")
           .upsert(failUpdates, { onConflict: "id" });
 
         if (failError) {
@@ -285,7 +285,7 @@ export const runPipeline = async (
       const ids = successResults.map((r) => r.id);
 
       const { data: currentItems } = await supabase
-        .from("trend")
+        .from("article")
         .select("*")
         .in("id", ids);
 
@@ -374,7 +374,7 @@ export const runPipeline = async (
 
       if (allUpdates.length > 0) {
         const { error } = await supabase
-          .from("trend")
+          .from("article")
           .upsert(allUpdates, { onConflict: "id" });
 
         if (error) {
@@ -462,7 +462,7 @@ export const runRetryPipeline = async (): Promise<PipelineResult> => {
 
     // FAIL 상태 항목 조회
     const { data: failedItems, error } = await supabase
-      .from("trend")
+      .from("article")
       .select("*")
       .eq("status", "FAIL")
       .order("date", { ascending: false })
@@ -514,7 +514,7 @@ export const runRetryPipeline = async (): Promise<PipelineResult> => {
         }));
 
         await supabase
-          .from("trend")
+          .from("article")
           .upsert(rejectUpdates, { onConflict: "id" });
 
         console.log(
@@ -586,7 +586,7 @@ export const runRetryPipeline = async (): Promise<PipelineResult> => {
           updateData.content = result.analysis.content;
         }
 
-        await supabase.from("trend").upsert(updateData, { onConflict: "id" });
+        await supabase.from("article").upsert(updateData, { onConflict: "id" });
         recoveredCount++;
         console.log(
           `      ✅ Recovered ID ${result.id} (Score: ${result.analysis.score})`,
@@ -607,7 +607,7 @@ export const runRetryPipeline = async (): Promise<PipelineResult> => {
           analyzedAt: new Date().toISOString(),
         };
 
-        await supabase.from("trend").upsert(
+        await supabase.from("article").upsert(
           {
             id: result.id,
             status: isMaxRetry ? "REJECTED" : "FAIL",
@@ -673,7 +673,7 @@ export const runGeminiProAnalysis = async (): Promise<void> => {
     const to = from + BATCH_SIZE - 1;
 
     const { data: candidates } = await supabase
-      .from("trend")
+      .from("article")
       .select("*")
       .eq("status", "ANALYZED")
       .neq("category", "X")
@@ -762,7 +762,7 @@ export const runGrokAnalysis = async (): Promise<void> => {
     const to = from + BATCH_SIZE - 1;
 
     const { data: candidates } = await supabase
-      .from("trend")
+      .from("article")
       .select("*")
       .in("status", ["ANALYZED", "RAW"])
       .neq("category", "YouTube")
@@ -834,7 +834,7 @@ async function saveAnalysisResults(
   const ids = results.map((r) => r.id);
 
   const { data: currentItems } = await supabase
-    .from("trend")
+    .from("article")
     .select("*")
     .in("id", ids);
 
@@ -910,7 +910,7 @@ async function saveAnalysisResults(
 
   if (updates.length > 0) {
     const { error } = await supabase
-      .from("trend")
+      .from("article")
       .upsert(updates, { onConflict: "id" });
 
     if (error) {

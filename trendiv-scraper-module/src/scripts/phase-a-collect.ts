@@ -209,7 +209,7 @@ async function main() {
 
   if (!isDryRun) {
     const { error } = await supabase
-      .from('trend')
+      .from('article')
       .upsert(dbRawData, { onConflict: 'link', ignoreDuplicates: true });
 
     if (error) {
@@ -224,7 +224,7 @@ async function main() {
 
   // RAW 상태인 항목만 조회 (아직 콘텐츠 수집 안 된 것들)
   const { data: rawDbItems, error: fetchError } = await supabase
-    .from('trend')
+    .from('article')
     .select('id, title, link, category, status')
     .is('content_raw', null)
     .in('status', ['RAW', 'ANALYZED'])
@@ -251,7 +251,7 @@ async function main() {
   if (youtubeItems.length > 0 && !isDryRun) {
     const youtubeIds = youtubeItems.map((item) => item.id);
     await supabase
-      .from('trend')
+      .from('article')
       .update({ status: 'SCRAPED' })
       .in('id', youtubeIds);
     console.log(`📹 YouTube ${youtubeItems.length}개 → SCRAPED 처리\n`);
@@ -260,7 +260,7 @@ async function main() {
   const xItems = rawDbItems.filter((item) => item.link.includes('x.com'));
   if (xItems.length > 0 && !isDryRun) {
     const xIds = xItems.map((item) => item.id);
-    await supabase.from('trend').update({ status: 'SCRAPED' }).in('id', xIds);
+    await supabase.from('article').update({ status: 'SCRAPED' }).in('id', xIds);
     console.log(
       `🐦 X(Twitter) ${xItems.length}개 → SCRAPED 처리 (Grok 담당)\n`,
     );
@@ -326,8 +326,12 @@ async function main() {
           SCREENSHOT_DIR,
           `blocked_${item.id}.png`,
         );
-        fs.writeFileSync(screenshotPath, result.screenshot);
-        console.log(`         📸 스크린샷 저장: ${screenshotPath}`);
+        try {
+          fs.writeFileSync(screenshotPath, result.screenshot);
+          console.log(`         📸 스크린샷 저장: ${screenshotPath}`);
+        } catch (fsErr) {
+          console.warn(`         ⚠️ 스크린샷 저장 실패 (무시): ${fsErr}`);
+        }
       }
       continue;
     }
@@ -341,8 +345,12 @@ async function main() {
     // 콘텐츠가 짧은 경우 스크린샷도 저장
     if (result.screenshot) {
       const screenshotPath = path.join(SCREENSHOT_DIR, `short_${item.id}.png`);
-      fs.writeFileSync(screenshotPath, result.screenshot);
-      console.log(`         📸 짧은 콘텐츠 스크린샷: ${screenshotPath}`);
+      try {
+        fs.writeFileSync(screenshotPath, result.screenshot);
+        console.log(`         📸 짧은 콘텐츠 스크린샷: ${screenshotPath}`);
+      } catch (fsErr) {
+        console.warn(`         ⚠️ 스크린샷 저장 실패 (무시): ${fsErr}`);
+      }
     }
 
     // DB 업데이트
@@ -353,7 +361,7 @@ async function main() {
       }
 
       const { error: updateError } = await supabase
-        .from('trend')
+        .from('article')
         .update(updateData)
         .eq('id', item.id);
 

@@ -61,7 +61,7 @@ const main = async () => {
 
   // 전체 RAW 개수 미리 세기 (진행률 표시용)
   const { count: totalRaw, error: countError } = await supabase
-    .from("trend")
+    .from("article")
     .select("*", { count: "exact", head: true })
     .eq("status", "RAW");
 
@@ -91,7 +91,7 @@ const main = async () => {
       console.log(`\n📦 [Batch ${batchCount}] RAW 데이터를 찾는 중...`);
 
       const { data: targetItems, error: fetchError } = await supabase
-        .from("trend")
+        .from("article")
         .select("*")
         .eq("status", "RAW")
         .order("id", { ascending: true })
@@ -200,7 +200,7 @@ const main = async () => {
             });
           } else {
             const { error: upsertError } = await supabase
-              .from("trend")
+              .from("article")
               .upsert(updates, { onConflict: "id" });
 
             if (upsertError) {

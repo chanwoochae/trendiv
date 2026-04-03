@@ -245,20 +245,22 @@ Oracle  → Supabase 조회 (미분석 항목) → 분석 API 호출 → 결과 
 
 | 항목      | 상태                                                          |
 | --------- | ------------------------------------------------------------- |
-| 계정      | 유료 업그레이드 진행중 (이메일 대기)                          |
-| 인스턴스  | AMD Micro (1 CPU / 1GB RAM) 생성 완료                         |
-| Public IP | 168.107.50.14                                                 |
-| SSH 접속  | `ssh -i ~/Downloads/ssh-key-2026-02-08.key opc@168.107.50.14` |
-| OS        | Oracle Linux 9                                                |
-| Swap      | ⚠️ 추가 필요 (1GB RAM이라 dnf update 실패)                    |
+| 계정      | ✅ 유료 업그레이드 완료                                        |
+| 인스턴스  | ✅ ARM Flex (4 OCPU / 24GB RAM) 업그레이드 완료               |
+| Public IP | 168.107.43.222                                                |
+| SSH 접속  | `ssh -i ~/Downloads/ssh-key-2026-02-08.key opc@168.107.43.222` |
+| OS        | Oracle Linux 9 (aarch64)                                      |
+| Swap      | ⚠️ 추가 권장 (안전망용 4GB)                                   |
 
-### Oracle 서버 Swap 추가 (다음에 이어서)
+### Oracle 서버 셋업 (다음에 이어서)
 
 ```bash
-sudo dd if=/dev/zero of=/swapfile bs=1M count=2048
+# Swap 4GB (24GB RAM이지만 안전망으로)
+sudo dd if=/dev/zero of=/swapfile bs=1M count=4096
 sudo chmod 600 /swapfile
 sudo mkswap /swapfile
 sudo swapon /swapfile
+echo '/swapfile none swap sw 0 0' | sudo tee -a /etc/fstab
 ```
 
 ### Oracle 서버에 Node.js 설치 (Swap 추가 후)
