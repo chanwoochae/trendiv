@@ -210,6 +210,44 @@ export const runPipeline = async (
           `      ⚠️ Batch ${loopCount} Analysis Failed:`,
           err.message,
         );
+
+        // 예외 발생 시 배치 아이템들을 FAIL 상태로 업데이트 (RAW 고착 방지)
+        const exceptionFailUpdates = cleanData.map((item) => {
+          const originalItem = targetItems.find((t: any) => t.id === item.id);
+          const existingHistory = originalItem?.analysis_results || [];
+          return {
+            id: item.id,
+            link: item.link,
+            title: item.title,
+            source: item.source,
+            category: item.category,
+            date: item.date,
+            status: "FAIL",
+            analysis_results: [
+              ...existingHistory,
+              {
+                aiModel: "SYSTEM",
+                score: 0,
+                reason: `FAIL: API_ERROR - ${err.message}`,
+                title_ko: "",
+                oneLineSummary: "",
+                keyPoints: [],
+                tags: ["_API_ACCESS_FAIL"],
+                analyzedAt: new Date().toISOString(),
+              },
+            ],
+          };
+        });
+
+        const { error: exceptionFailError } = await supabase
+          .from("trend")
+          .upsert(exceptionFailUpdates, { onConflict: "id" });
+
+        if (exceptionFailError) {
+          console.error("      ❌ Exception FAIL status save error:", exceptionFailError.message);
+        } else {
+          totalFailCount += exceptionFailUpdates.length;
+        }
       }
 
       // 🆕 성공/실패 분리

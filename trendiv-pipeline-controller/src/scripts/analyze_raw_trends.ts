@@ -224,6 +224,40 @@ const main = async () => {
           `⚠️ Batch ${batchCount} 분석 중 에러 발생:`,
           analysisError,
         );
+
+        // 예외 발생 시 배치 아이템들을 FAIL 상태로 업데이트 (RAW 고착 방지)
+        const errMsg = analysisError instanceof Error ? analysisError.message : String(analysisError);
+        const failUpdates = targetItems.map((item: any) => ({
+          ...item,
+          status: "FAIL",
+          analysis_results: [
+            ...(item.analysis_results || []),
+            {
+              aiModel: "SYSTEM",
+              score: 0,
+              reason: `FAIL: API_ERROR - ${errMsg}`,
+              title_ko: "",
+              oneLineSummary: "",
+              keyPoints: [],
+              tags: ["_API_ACCESS_FAIL"],
+              analyzedAt: new Date().toISOString(),
+            },
+          ],
+        }));
+
+        if (!isDryRun) {
+          const { error: failUpsertError } = await supabase
+            .from("trend")
+            .upsert(failUpdates, { onConflict: "id" });
+
+          if (failUpsertError) {
+            console.error(`❌ Batch ${batchCount} FAIL 저장 실패:`, failUpsertError.message);
+          } else {
+            totalFail += targetItems.length;
+          }
+        } else {
+          console.log(`[DRY-RUN] ${targetItems.length}개 FAIL 처리 예정`);
+        }
       }
 
       // 진행률 표시
