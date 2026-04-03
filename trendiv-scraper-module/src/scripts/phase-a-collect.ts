@@ -4,8 +4,8 @@
  * 1. 기존 scrapeAll()로 title/link/date 수집
  * 2. Supabase에 RAW 상태로 저장 (중복 스킵)
  * 3. 각 URL을 Playwright로 방문
- * 4. Readability.js로 본문 추출 (실패 시 innerText 폴백)
- * 5. 키워드 차단 체크
+ * 4. 3단계 차단 감지 (HTTP 상태코드 → title 패턴 → 시맨틱 요소)
+ * 5. Readability.js로 본문 추출 (실패 시 innerText 폴백)
  * 6. content_raw + 스크린샷 저장 → status: SCRAPED
  *
  * 실행: npx ts-node src/scripts/phase-a-collect.ts
@@ -26,7 +26,7 @@ dotenv.config({ path: envPath });
 
 import { performance } from 'perf_hooks';
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
-import { chromium, Browser, Page } from 'playwright';
+import { chromium, Browser, Page, Response } from 'playwright';
 import { Readability } from '@mozilla/readability';
 import { JSDOM } from 'jsdom';
 import { scrapeAll } from '../index';
@@ -37,32 +37,79 @@ const FETCH_DAYS = 7;
 const CONTENT_MIN_LENGTH = 200; // 이 미만이면 차단 의심
 const SCREENSHOT_DIR = path.resolve(__dirname, '../../screenshots');
 
-// ─── 차단 키워드 ────────────────────────────────────
-const BLOCK_KEYWORDS = [
+// ─── 차단 감지: title 패턴 ──────────────────────────
+const BLOCKED_TITLE_PATTERNS = [
   'access denied',
-  'blocked',
-  'forbidden',
-  'captcha',
-  'security check',
-  'cloudflare',
-  'ray id',
-  'verify you are human',
-  'please wait',
-  'checking your browser',
-  'error 1020',
-  'error 403',
-  '403 forbidden',
-  '503 service',
   'attention required',
   'just a moment',
-  'enable javascript and cookies',
+  'security check',
+  'forbidden',
+  'you have been blocked',
+  'captcha',
+  'verify you are human',
+  'error 403',
+  'error 1020',
+  '503 service',
+  'checking your browser',
+  'please wait',
+  'ddos protection',
+  'bot detection',
 ];
 
-// ─── 키워드 차단 체크 ───────────────────────────────
-function isBlocked(text: string): boolean {
-  const lower = text.toLowerCase();
-  if (lower.length > 1000) return false;
-  return BLOCK_KEYWORDS.some((keyword) => lower.includes(keyword));
+// ─── 3단계 차단 감지 ────────────────────────────────
+async function detectBlocked(
+  page: Page,
+  httpStatus: number,
+): Promise<{ blocked: boolean; reason?: string }> {
+  // ── Layer 1: HTTP 상태 코드 체크 (가장 확실) ──
+  if ([403, 503, 429].includes(httpStatus)) {
+    return { blocked: true, reason: `http_${httpStatus}` };
+  }
+
+  // ── Layer 2: title 태그 패턴 매칭 ──
+  const title = await page.title();
+  const lowerTitle = title.toLowerCase().trim();
+
+  if (
+    lowerTitle &&
+    BLOCKED_TITLE_PATTERNS.some((pattern) => lowerTitle.includes(pattern))
+  ) {
+    return { blocked: true, reason: `title: "${title}"` };
+  }
+
+  // ── Layer 3: 시맨틱 요소 존재 + 텍스트 길이 복합 체크 ──
+  const pageInfo = await page.evaluate(() => {
+    const semanticSelectors = [
+      'article',
+      'main',
+      '[role="main"]',
+      '.post',
+      '.content',
+      '.entry-content',
+      '.article-body',
+      '.post-content',
+      '.blog-post',
+    ];
+    const semanticCount = semanticSelectors.reduce(
+      (count, sel) => count + document.querySelectorAll(sel).length,
+      0,
+    );
+    const paragraphCount = document.querySelectorAll('p').length;
+    const textLength = document.body?.innerText?.length ?? 0;
+
+    return { semanticCount, paragraphCount, textLength };
+  });
+
+  // 시맨틱 요소 0개 + p 태그 2개 미만 + 텍스트 500자 미만 → 차단 의심
+  if (
+    pageInfo.semanticCount === 0 &&
+    pageInfo.paragraphCount < 2 &&
+    pageInfo.textLength < 500
+  ) {
+    return { blocked: true, reason: 'no_content_elements' };
+  }
+
+  return { blocked: false };
 }
 
 // ─── Readability.js로 본문 추출 ─────────────────────
@@ -88,53 +135,54 @@ async function fetchPageContent(
   blockReason?: string;
 }> {
   try {
-    await page.goto(url, {
+    // 페이지 이동 + HTTP 상태 코드 캡처
+    const response: Response | null = await page.goto(url, {
       waitUntil: 'domcontentloaded',
       timeout: 30000,
     });
     await page.waitForTimeout(2000);
 
+    const httpStatus = response?.status() ?? 0;
+
     // 팝업/쿠키 배너 닫기
     await page
       .click(
         '[aria-label*="close"], .js-consent-banner button, [class*="cookie"] button',
-        {
-          timeout: 2000,
-        },
+        { timeout: 2000 },
       )
       .catch(() => {});
 
-    // HTML 가져오기
-    const html = await page.content();
-    const innerText = await page.evaluate(() => document.body.innerText);
-
-    // 1. 키워드 차단 체크
-    if (isBlocked(innerText)) {
+    // ── 3단계 차단 감지 ──
+    const blockResult = await detectBlocked(page, httpStatus);
+    if (blockResult.blocked) {
       const screenshot = await page.screenshot({ type: 'png' });
       return {
         content_raw: null,
         screenshot,
         blocked: true,
-        blockReason: 'keyword_match',
+        blockReason: blockResult.reason,
       };
     }
 
-    // 2. Readability.js로 본문 추출
+    // ── 본문 추출 ──
+    const html = await page.content();
+    const innerText = await page.evaluate(() => document.body.innerText);
+
+    // 1. Readability.js로 본문 추출
     let content_raw = extractWithReadability(html, url);
 
-    // 3. 실패 시 innerText 폴백
+    // 2. 실패 시 innerText 폴백
     if (!content_raw || content_raw.length < 100) {
-      // innerText에서 기본 노이즈 제거
       content_raw = innerText.replace(/\n{3,}/g, '\n\n').trim();
     }
 
-    // 4. 콘텐츠가 너무 짧으면 차단 의심 → 스크린샷 저장
+    // 3. 콘텐츠가 너무 짧으면 → 스크린샷 저장 (차단은 아님, Phase B에서 Llama 재확인)
     if (!content_raw || content_raw.length < CONTENT_MIN_LENGTH) {
       const screenshot = await page.screenshot({ type: 'png' });
       return {
         content_raw: content_raw || null,
         screenshot,
-        blocked: false, // 확실한 차단은 아님, Phase B에서 Llama가 재확인
+        blocked: false,
         blockReason: 'content_too_short',
       };
     }
@@ -279,7 +327,7 @@ async function main() {
     locale: 'en-US',
   });
 
-  // 수정: route 핸들러에 try-catch 추가 + URL 필터링
+  // 불필요한 리소스 차단 (안전한 route 핸들러)
   await context.route('**/*', async (route) => {
     try {
       const url = route.request().url();
