@@ -11,14 +11,6 @@ on:
       - "trendiv-result-module/**"
       - ".github/workflows/deploy.yml"
 
-  # 수동 실행
-  workflow_dispatch:
-    inputs:
-      target:
-        description: 'Deploy target (production or staging)'
-        required: false
-        default: 'production'
-
   # Preview: PR + preview 라벨
   pull_request:
     types: [labeled]
