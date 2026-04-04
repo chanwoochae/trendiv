@@ -33,7 +33,7 @@ const LIMIT = limitArg ? parseInt(limitArg.split('=')[1]) : 100;
 const SCREENSHOT_DIR = path.resolve(__dirname, '../../screenshots');
 
 const OLLAMA_URL = process.env.OLLAMA_URL || 'http://localhost:11434';
-const OLLAMA_MODEL = process.env.OLLAMA_MODEL || 'llama3.2-vision';
+const OLLAMA_MODEL = process.env.OLLAMA_MODEL || 'gemma4:31b';
 
 // ─── Ollama: 텍스트 정리 ────────────────────────────
 async function refineText(contentRaw: string): Promise<string | null> {
@@ -99,7 +99,7 @@ async function checkOllama(): Promise<boolean> {
     const models: string[] = response.data?.models?.map((m: any) => m.name) || [];
     const hasModel = models.some((m) => m.includes(OLLAMA_MODEL.split(':')[0]));
     if (!hasModel) {
-      console.error(`❌ ${OLLAMA_MODEL} 모델이 없습니다. 설치: ollama pull llama3.2-vision`);
+      console.error(`❌ ${OLLAMA_MODEL} 모델이 없습니다. 설치: ollama pull ${OLLAMA_MODEL}`);
       return false;
     }
     return true;
