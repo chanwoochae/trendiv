@@ -240,7 +240,7 @@ export const runPipeline = async (
         });
 
         const { error: exceptionFailError } = await supabase
-          .from("trend")
+          .from("article")
           .upsert(exceptionFailUpdates, { onConflict: "id" });
 
         if (exceptionFailError) {

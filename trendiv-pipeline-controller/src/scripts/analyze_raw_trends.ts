@@ -247,7 +247,7 @@ const main = async () => {
 
         if (!isDryRun) {
           const { error: failUpsertError } = await supabase
-            .from("trend")
+            .from("article")
             .upsert(failUpdates, { onConflict: "id" });
 
           if (failUpsertError) {
