@@ -87,7 +87,7 @@ export class RssScraper implements Scraper {
       const items = feed.items.map((item) => {
         const content =
           item.contentSnippet || item.content || item.summary || '';
-        const date = item.isoDate || item.pubDate || null;
+        const date = item.isoDate || item.pubDate || undefined;
 
         return {
           title: item.title?.trim() || '제목 없음',
@@ -146,7 +146,7 @@ export class RssScraper implements Scraper {
       const items = response.data.items.map((item) => ({
         title: item.title?.trim() || '제목 없음',
         link: item.link || '',
-        date: item.pubDate || null,
+        date: item.pubDate || undefined,
         source: config.name,
         category: config.category,
         content: item.description || item.content || '',

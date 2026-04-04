@@ -270,13 +270,15 @@ async function main() {
   // ─── Step 3: RAW 상태 항목 가져와서 콘텐츠 수집 ───
   console.log('🌐 Step 3: 콘텐츠 수집 시작 (Playwright + Readability)...\n');
 
-  // RAW 상태인 항목만 조회 (아직 콘텐츠 수집 안 된 것들)
+  // RAW 상태인 항목만 조회 (최근 30일, 콘텐츠 수집 안 된 것들)
+  const cutoff = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
   const { data: rawDbItems, error: fetchError } = await supabase
     .from('article')
     .select('id, title, link, category, status')
     .is('content_raw', null)
     .in('status', ['RAW', 'ANALYZED'])
-    .order('id', { ascending: true })
+    .gte('date', cutoff)
+    .order('date', { ascending: false })
     .limit(50);
 
   if (fetchError || !rawDbItems) {
