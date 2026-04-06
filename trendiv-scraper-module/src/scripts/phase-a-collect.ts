@@ -384,6 +384,28 @@ async function main() {
           console.warn(`         ⚠️ 스크린샷 저장 실패 (무시): ${fsErr}`);
         }
       }
+
+      // blocked_queue에 저장 (WeedBot이 조회/관리)
+      if (!isDryRun) {
+        const { error: queueError } = await supabase
+          .from('blocked_queue')
+          .upsert(
+            {
+              article_id: item.id,
+              link: item.link,
+              title: item.title,
+              block_reason: result.blockReason ?? null,
+              status: 'PENDING',
+              updated_at: new Date().toISOString(),
+            },
+            { onConflict: 'article_id', ignoreDuplicates: true },
+          );
+        if (queueError) {
+          console.warn(`         ⚠️ blocked_queue 저장 실패: ${queueError.message}`);
+        } else {
+          console.log(`         📋 blocked_queue 등록 완료`);
+        }
+      }
       continue;
     }
 
