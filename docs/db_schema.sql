@@ -67,13 +67,19 @@ CREATE INDEX IF NOT EXISTS idx_article_no_report ON article(id)
 
 -- STEP 3: trend → article 데이터 이관
 -- ⚠️ article 테이블이 비어있을 때만 실행할 것
+-- analysis_results: trend 테이블은 jsonb, article은 jsonb[] → ARRAY[]로 캐스팅
 INSERT INTO public.article (
   id, created_at, title, link, date, source, category,
   status, content_raw, content, analysis_results, represent_result
 )
 SELECT
   id, created_at, title, link, date, source, category,
-  status, content_raw, content, analysis_results, represent_result
+  status, content_raw, content,
+  CASE
+    WHEN analysis_results IS NULL THEN NULL
+    ELSE ARRAY(SELECT jsonb_array_elements(analysis_results))
+  END,
+  represent_result
 FROM public.trend
 ON CONFLICT (link) DO NOTHING;
 
