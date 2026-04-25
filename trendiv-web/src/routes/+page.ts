@@ -14,7 +14,7 @@ export const load: PageLoad = async ({ fetch }) => {
 	// 1. 카테고리 가져오기 함수
 	const fetchCategories = async () => {
 		const { data, error } = await supabase
-			.from('trend')
+			.from('article')
 			.select('category')
 			.eq('status', 'ANALYZED');
 
