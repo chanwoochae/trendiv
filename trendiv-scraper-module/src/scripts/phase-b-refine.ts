@@ -33,7 +33,17 @@ const LIMIT = limitArg ? parseInt(limitArg.split('=')[1]) : 100;
 const SCREENSHOT_DIR = path.resolve(__dirname, '../../screenshots');
 
 const OLLAMA_URL = process.env.OLLAMA_URL || 'http://localhost:11434';
-const OLLAMA_MODEL = process.env.OLLAMA_MODEL || 'gemma4:31b';
+const OLLAMA_MODEL = process.env.OLLAMA_MODEL || 'qwen3.6:27b';
+const OLLAMA_VISION_MODEL = process.env.OLLAMA_VISION_MODEL || 'gemma4:26b';
+
+// 기본 30분, 실제 응답이 30분 초과하면 그 시간 + 1분으로 늘어남
+const DEFAULT_TIMEOUT_MS = 30 * 60 * 1000;
+let maxElapsedMs = DEFAULT_TIMEOUT_MS;
+function getAdaptiveTimeout(): number {
+  return maxElapsedMs > DEFAULT_TIMEOUT_MS
+    ? maxElapsedMs + 60000
+    : DEFAULT_TIMEOUT_MS;
+}
 
 // ─── Ollama: 텍스트 정리 ────────────────────────────
 async function refineText(contentRaw: string): Promise<string | null> {
@@ -46,6 +56,7 @@ Output only the cleaned text, no explanations.
 ${contentRaw.slice(0, 6000)}
 ---`;
 
+  const t0 = Date.now();
   try {
     const response = await axios.post(
       `${OLLAMA_URL}/api/generate`,
@@ -53,10 +64,13 @@ ${contentRaw.slice(0, 6000)}
         model: OLLAMA_MODEL,
         prompt,
         stream: false,
-        options: { temperature: 0.1, num_predict: 4096 },
+        think: false,
+        options: { temperature: 0.1, num_predict: 2048 },
       },
-      { timeout: 120000 },
+      { timeout: getAdaptiveTimeout() },
     );
+    const elapsed = Date.now() - t0;
+    if (elapsed > maxElapsedMs) maxElapsedMs = elapsed;
     const result = response.data?.response?.trim();
     return result || null;
   } catch (err: any) {
@@ -64,7 +78,7 @@ ${contentRaw.slice(0, 6000)}
   }
 }
 
-// ─── Ollama: 스크린샷 차단 여부 확인 ────────────────
+// ─── Ollama: 스크린샷 차단 여부 확인 (gemma4 vision) ────────────
 async function checkScreenshotBlocked(screenshotPath: string): Promise<boolean> {
   if (!fs.existsSync(screenshotPath)) return false;
 
@@ -77,7 +91,7 @@ Answer with only "BLOCKED" or "OK".`;
     const response = await axios.post(
       `${OLLAMA_URL}/api/generate`,
       {
-        model: OLLAMA_MODEL,
+        model: OLLAMA_VISION_MODEL,
         prompt,
         images: [imageData],
         stream: false,
@@ -162,7 +176,7 @@ async function main() {
   for (let i = 0; i < items.length; i++) {
     const item = items[i];
     const progress = `[${i + 1}/${items.length}]`;
-    console.log(`${progress} ${item.title?.substring(0, 60)}`);
+    console.log(`${progress} ${item.title?.substring(0, 60)}\n   🔗 ${item.link}`);
 
     // 스크린샷 있으면 Vision으로 차단 여부 재확인
     const blockedScreenshotPath = path.join(SCREENSHOT_DIR, `blocked_${item.id}.png`);

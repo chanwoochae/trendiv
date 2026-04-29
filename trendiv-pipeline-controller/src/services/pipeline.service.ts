@@ -10,6 +10,7 @@ import {
   isFailedResult,
 } from "trendiv-analysis-module";
 import { composeEmailHtml as generateNewsletterHtml } from "trendiv-result-module";
+import { notifyXaiBalance } from "./xai-balance.service";
 
 dotenv.config({ path: path.resolve(__dirname, "../../../.env") });
 
@@ -65,6 +66,7 @@ interface PipelineResult {
 
 interface UpsertItem {
   id: number;
+  link?: string;
   title?: string;
   analysis_results: AnalysisEntry[];
   status: string;
@@ -769,13 +771,15 @@ export const runGeminiProAnalysis = async (): Promise<void> => {
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 export const runGrokAnalysis = async (): Promise<void> => {
   console.log(
-    "🦅 [Grok Analysis] Starting analysis (X: Raw/Analyzed, Others: Analyzed)...",
+    "🦅 [Grok Analysis] Starting 2-stage analysis (fast → deep for score ≥ 4)...",
   );
 
   const supabaseUrl = process.env.SUPABASE_URL;
   const supabaseKey = process.env.SUPABASE_KEY;
   const grokKey = process.env.GROK_API_KEY;
-  const modelName = process.env.GROK_MODEL || "grok-4-1-fast-reasoning";
+  const fastModel = process.env.GROK_MODEL || "grok-4-1-fast-reasoning";
+  const deepModel = process.env.GROK_MODEL_DEEP || "grok-4.20-non-reasoning";
+  const DEEP_SCORE_THRESHOLD = 7;
 
   if (!supabaseUrl || !supabaseKey) {
     console.error("❌ [Grok] Supabase 환경변수 누락");
@@ -812,12 +816,12 @@ export const runGrokAnalysis = async (): Promise<void> => {
     for (const item of candidates) {
       if (targets.length >= TARGET_COUNT) break;
 
-      if (item.category !== "X" && item.status === "RAW") {
+      if (item.category !== "X") {
         continue;
       }
 
       const history = (item.analysis_results as AnalysisEntry[]) || [];
-      const alreadyAnalyzed = history.some((h) => h.aiModel === modelName);
+      const alreadyAnalyzed = history.some((h) => h.aiModel === fastModel);
 
       if (!alreadyAnalyzed) {
         targets.push({
@@ -839,20 +843,48 @@ export const runGrokAnalysis = async (): Promise<void> => {
     return;
   }
 
-  console.log(
-    `   🎯 Grok Targets: ${targets.length} items (Model: ${modelName})`,
-  );
+  console.log(`   🎯 [1단계] Fast 스코어링: ${targets.length}개 (${fastModel})`);
 
+  // ── 1단계: fast 모델로 스코어링 ──────────────────────────
+  let fastResults: AnalysisResult[] = [];
   try {
     const results = await runAnalysis(targets, {
-      modelName: modelName,
+      modelName: fastModel,
       provider: "grok",
     });
-    await saveAnalysisResults(supabase, results as AnalysisResult[]);
-    console.log(`   ✅ Grok Done: ${results.length} processed`);
+    fastResults = results as AnalysisResult[];
+    await saveAnalysisResults(supabase, fastResults);
+    console.log(`   ✅ [1단계] 완료: ${fastResults.length}개`);
   } catch (e) {
-    console.error("   ❌ Grok Failed:", e);
+    console.error("   ❌ [1단계] Fast 분석 실패:", e);
+    return;
   }
+
+  // ── 2단계: 점수 ≥ 7인 항목만 deep 모델로 심층 분석 ──────
+  const deepTargets = fastResults
+    .filter((r) => !isFailedResult(r) && (r as AnalysisResult).score >= DEEP_SCORE_THRESHOLD)
+    .map((r) => targets.find((t) => t.id === r.id)!)
+    .filter(Boolean);
+
+  if (deepTargets.length === 0) {
+    console.log(`   ✅ [2단계] 점수 ≥ ${DEEP_SCORE_THRESHOLD} 항목 없음. 스킵.`);
+    return;
+  }
+
+  console.log(`   🎯 [2단계] Deep 분석: ${deepTargets.length}개 (${deepModel})`);
+
+  try {
+    const deepResults = await runAnalysis(deepTargets, {
+      modelName: deepModel,
+      provider: "grok",
+    });
+    await saveAnalysisResults(supabase, deepResults as AnalysisResult[]);
+    console.log(`   ✅ [2단계] 완료: ${deepResults.length}개`);
+  } catch (e) {
+    console.error("   ❌ [2단계] Deep 분석 실패:", e);
+  }
+
+  await notifyXaiBalance("Grok 분석");
 };
 
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -933,6 +965,7 @@ async function saveAnalysisResults(
 
     const updateData: UpsertItem = {
       id: result.id,
+      link: current.link,
       title: result.title_ko || "제목 없음",
       analysis_results: updatedHistory,
       status: result.score > 0 ? "ANALYZED" : "REJECTED",

@@ -320,7 +320,7 @@ async function main() {
   // Playwright 브라우저 시작 (headless=false로 차단 우회)
   const browser: Browser = await chromium.launch({
     headless: false,
-    args: ['--disable-blink-features=AutomationControlled'],
+    args: ['--disable-blink-features=AutomationControlled', '--disable-http2'],
   });
 
   const context = await browser.newContext({
