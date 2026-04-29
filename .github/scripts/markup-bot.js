@@ -12,6 +12,11 @@ const COMMENT_BODY    = process.env.COMMENT_BODY ?? "";
 const REPO_OWNER      = process.env.REPO_OWNER;
 const REPO_NAME       = process.env.REPO_NAME;
 
+// ─── 디버그 ───────────────────────────────────────────────────────────────────
+console.log(`[DEBUG] WEEDBOT_URL: ${WEEDBOT_URL}`);
+console.log(`[DEBUG] WEEDBOT_API_KEY: ${WEEDBOT_API_KEY ? `${WEEDBOT_API_KEY.slice(0,6)}...${WEEDBOT_API_KEY.slice(-4)} (len=${WEEDBOT_API_KEY.length})` : "❌ 없음"}`);
+console.log(`[DEBUG] COMMENT_BODY: ${COMMENT_BODY.slice(0, 80)}`);
+
 const GH_BASE = `https://api.github.com/repos/${REPO_OWNER}/${REPO_NAME}`;
 
 // ─── 봇 코멘트 식별자 ────────────────────────────────────────────────────────
@@ -105,7 +110,18 @@ async function fetchFigmaContext(url) {
 
 // ─── WeedBot API ─────────────────────────────────────────────────────────────
 async function callWeedBot(payload) {
-  const res = await fetch(`${WEEDBOT_URL}/api/markup`, {
+  const url = `${WEEDBOT_URL}/api/markup`;
+  console.log(`[DEBUG] POST ${url} (type=${payload.type})`);
+
+  // health check 먼저
+  try {
+    const health = await fetch(`${WEEDBOT_URL}/health`);
+    console.log(`[DEBUG] Health: ${health.status} ${await health.text()}`);
+  } catch (e) {
+    console.log(`[DEBUG] Health check 실패: ${e.message}`);
+  }
+
+  const res = await fetch(url, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -113,8 +129,12 @@ async function callWeedBot(payload) {
     },
     body: JSON.stringify(payload),
   });
-  if (!res.ok) throw new Error(`WeedBot ${res.status}: ${await res.text()}`);
-  return res.json();
+
+  const responseText = await res.text();
+  console.log(`[DEBUG] Response ${res.status}: ${responseText.slice(0, 200)}`);
+
+  if (!res.ok) throw new Error(`WeedBot ${res.status}: ${responseText}`);
+  return JSON.parse(responseText);
 }
 
 // ─── 코멘트 본문 빌더 ────────────────────────────────────────────────────────
