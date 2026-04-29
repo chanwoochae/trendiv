@@ -2,8 +2,9 @@
 "use strict";
 
 const GITHUB_TOKEN    = process.env.GITHUB_TOKEN;
-const ANTHROPIC_KEY   = process.env.ANTHROPIC_API_KEY;
 const FIGMA_KEY       = process.env.FIGMA_API_KEY;
+const WEEDBOT_URL     = process.env.WEEDBOT_URL ?? "http://168.107.43.222:3002";
+const WEEDBOT_API_KEY = process.env.WEEDBOT_API_KEY;
 const ISSUE_NUMBER    = Number(process.env.ISSUE_NUMBER);
 const ISSUE_TITLE     = process.env.ISSUE_TITLE ?? "";
 const COMMENT_ID      = Number(process.env.COMMENT_ID);
@@ -102,31 +103,18 @@ async function fetchFigmaContext(url) {
   }
 }
 
-// ─── Claude API ──────────────────────────────────────────────────────────────
-async function callClaude(system, messages) {
-  const res = await fetch("https://api.anthropic.com/v1/messages", {
+// ─── WeedBot API ─────────────────────────────────────────────────────────────
+async function callWeedBot(payload) {
+  const res = await fetch(`${WEEDBOT_URL}/api/markup`, {
     method: "POST",
     headers: {
-      "x-api-key": ANTHROPIC_KEY,
-      "anthropic-version": "2023-06-01",
-      "content-type": "application/json",
+      "Content-Type": "application/json",
+      "Authorization": `Bearer ${WEEDBOT_API_KEY}`,
     },
-    body: JSON.stringify({
-      model: "claude-opus-4-5",
-      max_tokens: 4096,
-      system,
-      messages,
-    }),
+    body: JSON.stringify(payload),
   });
-  if (!res.ok) throw new Error(`Claude ${res.status}: ${await res.text()}`);
-  const data = await res.json();
-  return data.content[0].text;
-}
-
-// XML 태그에서 섹션 추출
-function extract(text, tag) {
-  const m = text.match(new RegExp(`<${tag}>[\\s\\S]*?<\\/${tag}>`));
-  return m ? m[0].replace(new RegExp(`^<${tag}>|<\\/${tag}>$`, "g"), "").trim() : null;
+  if (!res.ok) throw new Error(`WeedBot ${res.status}: ${await res.text()}`);
+  return res.json();
 }
 
 // ─── 코멘트 본문 빌더 ────────────────────────────────────────────────────────
@@ -194,40 +182,17 @@ async function handleInit(botComments, body) {
 
   const figmaContext = await fetchFigmaContext(figmaUrl);
 
-  const system = `당신은 Svelte/SvelteKit 컴포넌트 마크업 전문가이자 협업 파트너입니다.
-피그마 디자인을 분석해 ASCII 마크업으로 표현하고, 이슈 작성자와 대화하며 마크업을 완성합니다.
+  const result = await callWeedBot({
+    type: "init",
+    issueTitle: ISSUE_TITLE,
+    figmaContext: figmaContext ?? null,
+    extraInstruction: extraInstruction || undefined,
+  });
 
-## 마크업 규칙
-- 컴포넌트를 ASCII 박스 레이아웃으로 표현
-- Svelte 컴포넌트명 사용: <ScoreBadge />, <ArticleCard />, <TagChip /> 등
-- 예시:
-  | <DragHandle />                                          |
-  | <ScoreBadge score={9} />  <SourceInfo />  <Bookmark /> |
-  |-------------------------------------------------------|
-  | <TitlePanel>제목</TitlePanel>                          |
-  | <SummaryPanel>AI 요약</SummaryPanel>                  |
-  | <TagList tags={tags} />                               |
-  | <PrimaryButton>원문 보기</PrimaryButton>              |
-
-## 응답 형식 (반드시 XML 태그 사용)
-<markup>ASCII 마크업 전체</markup>
-<spec>컴포넌트 스펙 (마크다운 표)</spec>
-<reply>사용자에게 보내는 자연어 응답</reply>
-<history>첫 설정 요약 (3줄)</history>`;
-
-  const userMsg = [
-    `이슈 제목: ${ISSUE_TITLE}`,
-    figmaUrl ? `피그마 링크: ${figmaUrl}` : "",
-    figmaContext ? `\n피그마 구조:\n${figmaContext}` : "※ 피그마 데이터 없음",
-    extraInstruction ? `\n추가 요청: ${extraInstruction}` : "",
-  ].filter(Boolean).join("\n");
-
-  const response = await callClaude(system, [{ role: "user", content: userMsg }]);
-
-  const markup  = extract(response, "markup")  ?? response;
-  const spec    = extract(response, "spec")    ?? "스펙 정리 중...";
-  const reply   = extract(response, "reply")   ?? "마크업 초안을 작성했습니다.";
-  const history = extract(response, "history") ?? "";
+  const markup  = result.markup  ?? "마크업 생성 실패";
+  const spec    = result.spec    ?? "스펙 정리 중...";
+  const reply   = result.reply   ?? "마크업 초안을 작성했습니다.";
+  const history = result.history ?? "";
 
   // 3개 코멘트 생성 (기존 있으면 업데이트)
   await upsertComment(botComments.markup, buildMarkupComment(markup));
@@ -243,29 +208,16 @@ async function handleConversation(botComments, userMessage) {
   const currentMarkup = extractMarkdownCode(botComments.markup?.body ?? "");
   const currentHistory = extractSummary(botComments.thread?.body ?? "");
 
-  const system = `당신은 Svelte/SvelteKit 컴포넌트 마크업 전문가이자 협업 파트너입니다.
-사용자와 대화하며 마크업을 점진적으로 완성합니다.
+  const result = await callWeedBot({
+    type: "conversation",
+    currentMarkup,
+    currentHistory,
+    userMessage,
+  });
 
-## 마크업 규칙
-- ASCII 박스 레이아웃, Svelte 컴포넌트명 사용
-- 변경 없으면 <markup>UNCHANGED</markup>
-
-## 응답 형식 (반드시 XML 태그 사용)
-<markup>변경된 마크업 전체 또는 UNCHANGED</markup>
-<reply>사용자에게 보내는 자연어 응답 (마크다운)</reply>
-<history>전체 대화 내용 압축 요약 (5줄 이내)</history>`;
-
-  const userContent = [
-    `현재 마크업:\n\`\`\`\n${currentMarkup}\n\`\`\``,
-    currentHistory ? `\n이전 대화 요약:\n${currentHistory}` : "",
-    `\n사용자: ${userMessage}`,
-  ].join("\n");
-
-  const response = await callClaude(system, [{ role: "user", content: userContent }]);
-
-  const newMarkup = extract(response, "markup");
-  const reply     = extract(response, "reply")   ?? response;
-  const history   = extract(response, "history") ?? currentHistory;
+  const newMarkup = result.markup;
+  const reply     = result.reply   ?? userMessage;
+  const history   = result.history ?? currentHistory;
 
   // 마크업 변경 시 Comment 1 업데이트
   if (newMarkup && newMarkup !== "UNCHANGED" && botComments.markup) {

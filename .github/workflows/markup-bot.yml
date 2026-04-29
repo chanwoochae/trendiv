@@ -32,7 +32,8 @@ jobs:
         run: node .github/scripts/markup-bot.js
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          WEEDBOT_URL: ${{ secrets.WEEDBOT_URL }}
+          WEEDBOT_API_KEY: ${{ secrets.WEEDBOT_API_KEY }}
           FIGMA_API_KEY: ${{ secrets.FIGMA_API_KEY }}
           ISSUE_NUMBER: ${{ github.event.issue.number }}
           ISSUE_TITLE: ${{ github.event.issue.title }}
