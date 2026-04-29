@@ -34,7 +34,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           WEEDBOT_URL: ${{ secrets.WEEDBOT_URL }}
           WEEDBOT_API_KEY: ${{ secrets.WEEDBOT_API_KEY }}
-          FIGMA_API_KEY: ${{ secrets.FIGMA_API_KEY }}
+          FIGMA_ACCESS_TOKEN: ${{ secrets.FIGMA_ACCESS_TOKEN }}
           ISSUE_NUMBER: ${{ github.event.issue.number }}
           ISSUE_TITLE: ${{ github.event.issue.title }}
           COMMENT_ID: ${{ github.event.comment.id }}

@@ -2,7 +2,7 @@
 "use strict";
 
 const GITHUB_TOKEN    = process.env.GITHUB_TOKEN;
-const FIGMA_KEY       = process.env.FIGMA_API_KEY;
+const FIGMA_KEY       = process.env.FIGMA_ACCESS_TOKEN;
 const WEEDBOT_URL     = process.env.WEEDBOT_URL ?? "http://168.107.43.222:3002";
 const WEEDBOT_API_KEY = process.env.WEEDBOT_API_KEY;
 const ISSUE_NUMBER    = Number(process.env.ISSUE_NUMBER);
