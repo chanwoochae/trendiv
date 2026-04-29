@@ -19,6 +19,7 @@ export interface Trend {
 	analysis_results?: AnalysisResult[];
 	represent_result?: AnalysisResult | null;
 	content?: string;
+	report_html?: string | null;
 }
 
 export interface HiddenArticle {

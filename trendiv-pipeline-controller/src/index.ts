@@ -458,6 +458,57 @@ if (process.env.BATCH_MODE === "true") {
     console.log(`🚀 Mode: AI API Direct (Playwright only for retries)`);
   });
 
+  // ==========================================
+  // 자동 크론 (KST 09:00 = UTC 00:00)
+  // - daily:  매일 (X + YouTube)
+  // - weekly: 월, 목 (RSS 소스)
+  // ==========================================
+  const runCronPipeline = async (mode: "daily" | "weekly") => {
+    if (isPipelineRunning) {
+      console.warn(`⏰ [Cron/${mode}] 파이프라인 이미 실행 중 — 스킵`);
+      return;
+    }
+    console.log(`⏰ [Cron/${mode}] 자동 시작`);
+    isPipelineRunning = true;
+    try {
+      const result = await runPipeline(mode);
+      if (result.success) {
+        console.log(`✅ [Cron/${mode}] 완료: ${result.count}건 처리`);
+      } else {
+        console.error(`❌ [Cron/${mode}] 실패:`, result.error);
+      }
+    } catch (err) {
+      console.error(`❌ [Cron/${mode}] 예외:`, err);
+    } finally {
+      isPipelineRunning = false;
+    }
+  };
+
+  const scheduleNext = (mode: "daily" | "weekly") => {
+    const now = new Date();
+    const next = new Date();
+    next.setUTCHours(0, 0, 0, 0); // UTC 00:00 = KST 09:00
+    if (next <= now) next.setUTCDate(next.getUTCDate() + 1);
+
+    if (mode === "weekly") {
+      // 월(1), 목(4)만 실행
+      while (next.getUTCDay() !== 1 && next.getUTCDay() !== 4) {
+        next.setUTCDate(next.getUTCDate() + 1);
+      }
+    }
+
+    const msUntilNext = next.getTime() - now.getTime();
+    console.log(`⏰ [Cron/${mode}] 다음 실행: ${next.toISOString()} (${Math.round(msUntilNext / 60000)}분 후)`);
+
+    setTimeout(async () => {
+      await runCronPipeline(mode);
+      scheduleNext(mode); // 다음 실행 예약
+    }, msUntilNext);
+  };
+
+  scheduleNext("daily");
+  scheduleNext("weekly");
+
   // Graceful Shutdown
   const shutdown = () => {
     console.log("Shutdown signal received: closing HTTP server");

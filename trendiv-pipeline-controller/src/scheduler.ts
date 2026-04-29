@@ -1,4 +1,6 @@
 import cron from "node-cron";
+import { execFile } from "child_process";
+import * as path from "path";
 import {
   runPipeline,
   runGeminiProAnalysis,
@@ -116,6 +118,23 @@ export const initScheduler = () => {
         isGrokRunning = false;
         console.log("   ✔️  Grok Analysis scheduled (Daily 10:45 KST)");
       }
+    },
+    { timezone: "Asia/Seoul" },
+  );
+
+  // 4. xAI 잔액 알림 (매일 09:00 KST)
+  cron.schedule(
+    "0 9 * * *",
+    () => {
+      const scriptPath = path.resolve(__dirname, "scripts/check_xai_balance.ts");
+      const tsNode = path.resolve(__dirname, "../../node_modules/.bin/ts-node");
+      execFile(tsNode, ["--project", path.resolve(__dirname, "../tsconfig.json"), scriptPath], (err, stdout, stderr) => {
+        if (err) {
+          console.error("❌ [xAI Balance] 잔액 알림 실패:", stderr || err.message);
+        } else {
+          console.log("💰 [xAI Balance]", stdout.trim());
+        }
+      });
     },
     { timezone: "Asia/Seoul" },
   );

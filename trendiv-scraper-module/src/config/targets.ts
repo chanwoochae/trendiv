@@ -266,13 +266,6 @@ export const TARGETS: ScraperConfig[] = [
     includeKeywords: MARKUP_KEYWORDS,
   },
   {
-    name: 'Chris Coyier',
-    category: 'Blog',
-    type: 'rss',
-    url: 'https://chriscoyier.net/feed/',
-    includeKeywords: MARKUP_KEYWORDS,
-  },
-  {
     name: 'Bram.us',
     category: 'Blog',
     type: 'rss',
