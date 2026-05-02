@@ -1,8 +1,7 @@
 name: 🎨 Markup Bot
 
 on:
-  issue_comment:
-    types: [created]
+  workflow_dispatch:  # GitHub App 웹훅 방식으로 전환 — 수동 실행만 가능
 
 permissions:
   issues: write
